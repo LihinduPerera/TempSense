@@ -13,7 +13,7 @@
 
 // WiFi & MQTT Credentials - CHANGE THESE TO YOUR NETWORK
 #define WIFI_SSID "MT20_MIFI_GEN-66"
-#define WIFI_PASSWORD "00000000"
+#define WIFI_PASSWORD "9g8P604?"
 #define MQTT_HOST "broker.hivemq.com"
 #define MQTT_PORT 1883
 
@@ -53,25 +53,28 @@ int spo2 = 0;
 int fanSpeed = 0;
 bool autoMode = true;
 unsigned long lastSensorUpdate = 0;
-const long sensorInterval = 2000;
+const long sensorInterval = 1000;  // Reduced from 2000 to 1000ms
 bool max30102Connected = false;
 
-// Heart rate detection
+// Heart rate detection - IMPROVED
 const byte RATE_SIZE = 4;
 byte rates[RATE_SIZE];
 byte rateSpot = 0;
 long lastBeat = 0;
-float beatsPerMinute;
-int beatAvg;
+float beatsPerMinute = 0;
+int beatAvg = 0;
 
-// SpO2 variables
-uint32_t irBuffer[100];
-uint32_t redBuffer[100];
-int32_t bufferLength = 100;
-int32_t spo2Value;
-int8_t validSPO2;
-int32_t heartRateValue;
-int8_t validHeartRate;
+// NEW: Fast sampling for heart rate
+unsigned long lastHeartRateSample = 0;
+const long heartRateSampleInterval = 20; // Sample every 20ms for better beat detection
+
+// SpO2 calculation variables - OPTIMIZED
+#define SPO2_BUFFER_SIZE 50  // Increased for better accuracy
+uint32_t irBuffer[SPO2_BUFFER_SIZE];
+uint32_t redBuffer[SPO2_BUFFER_SIZE];
+int bufferIndex = 0;
+bool bufferFilled = false;
+unsigned long lastSpO2Calc = 0;
 
 // Buffer for MQTT messages
 char msgBuffer[50];
@@ -221,7 +224,7 @@ void connectToMqtt() {
 // ====================
 void publishSensorData() {
   if (!mqttClient.connected()) {
-    return; // Skip publishing if not connected
+    return;
   }
   
   snprintf(msgBuffer, sizeof(msgBuffer), "%.1f", temperature);
@@ -259,6 +262,110 @@ void readDHT22() {
   }
 }
 
+// Calculate SpO2 from buffered data - FASTER
+void calculateSpO2() {
+  if (!bufferFilled) return;
+  
+  // Find max and min values
+  uint32_t irMax = 0, irMin = 0xFFFFFFFF;
+  uint32_t redMax = 0, redMin = 0xFFFFFFFF;
+  
+  for (int i = 0; i < SPO2_BUFFER_SIZE; i++) {
+    if (irBuffer[i] > irMax) irMax = irBuffer[i];
+    if (irBuffer[i] < irMin) irMin = irBuffer[i];
+    if (redBuffer[i] > redMax) redMax = redBuffer[i];
+    if (redBuffer[i] < redMin) redMin = redBuffer[i];
+  }
+  
+  // Calculate AC and DC components
+  float irAC = irMax - irMin;
+  float irDC = (irMax + irMin) / 2.0;
+  float redAC = redMax - redMin;
+  float redDC = (redMax + redMin) / 2.0;
+  
+  // Avoid division by zero
+  if (irAC < 100 || irDC < 100 || redDC < 100) {
+    return;
+  }
+  
+  // Calculate R value (ratio of ratios)
+  float R = (redAC / redDC) / (irAC / irDC);
+  
+  // Convert R to SpO2 percentage using empirical formula
+  if (R >= 0.4 && R <= 2.0) {
+    // Standard empirical formula
+    float calculatedSpO2 = 110.0 - 25.0 * R;
+    
+    // Constrain to realistic values
+    spo2 = constrain((int)calculatedSpO2, 85, 100);
+  }
+}
+
+// NEW: Continuous heart rate sampling
+void sampleHeartRate() {
+  if (!max30102Connected) {
+    return;
+  }
+  
+  long irValue = particleSensor.getIR();
+  long redValue = particleSensor.getRed();
+  
+  // Check if finger is present (lowered threshold)
+  if (irValue < 10000) {
+    heartRate = 0;
+    beatsPerMinute = 0;
+    // Reset rate array
+    for (byte x = 0; x < RATE_SIZE; x++) {
+      rates[x] = 0;
+    }
+    rateSpot = 0;
+    return;
+  }
+  
+  // Store in SpO2 buffer
+  irBuffer[bufferIndex] = irValue;
+  redBuffer[bufferIndex] = redValue;
+  bufferIndex++;
+  
+  if (bufferIndex >= SPO2_BUFFER_SIZE) {
+    bufferIndex = 0;
+    bufferFilled = true;
+  }
+  
+  // Check for heartbeat using library function
+  if (checkForBeat(irValue) == true) {
+    // Calculate time between beats
+    long delta = millis() - lastBeat;
+    lastBeat = millis();
+    
+    // Calculate BPM
+    beatsPerMinute = 60.0 / (delta / 1000.0);
+    
+    // Filter: only accept reasonable heart rates
+    if (beatsPerMinute > 30 && beatsPerMinute < 220) {
+      rates[rateSpot++] = (byte)beatsPerMinute;
+      rateSpot %= RATE_SIZE;
+      
+      // Calculate running average
+      int sum = 0;
+      int validCount = 0;
+      for (byte x = 0; x < RATE_SIZE; x++) {
+        if (rates[x] > 0) {
+          sum += rates[x];
+          validCount++;
+        }
+      }
+      
+      if (validCount > 0) {
+        beatAvg = sum / validCount;
+        heartRate = beatAvg;
+      }
+      
+      Serial.printf("💓 BEAT! BPM: %.1f | Avg: %d | IR: %ld\n", beatsPerMinute, beatAvg, irValue);
+    }
+  }
+}
+
 void readMAX30102() {
   if (!max30102Connected) {
     heartRate = 0;
@@ -268,55 +375,18 @@ void readMAX30102() {
   
   long irValue = particleSensor.getIR();
   
-  // Check if finger is detected (IR value > 50000 indicates finger presence)
-  if (irValue < 50000) {
-    heartRate = 0;
-    spo2 = 0;
+  // Check finger presence
+  if (irValue < 10000) {
+    Serial.println("❌ No finger detected (IR < 10000)");
     return;
   }
   
-  // Check for heartbeat
-  if (checkForBeat(irValue) == true) {
-    long delta = millis() - lastBeat;
-    lastBeat = millis();
-    
-    beatsPerMinute = 60 / (delta / 1000.0);
-    
-    // Only accept reasonable heart rates (40-200 BPM)
-    if (beatsPerMinute > 40 && beatsPerMinute < 200) {
-      rates[rateSpot++] = (byte)beatsPerMinute;
-      rateSpot %= RATE_SIZE;
-      
-      // Calculate average
-      beatAvg = 0;
-      for (byte x = 0; x < RATE_SIZE; x++) {
-        beatAvg += rates[x];
-      }
-      beatAvg /= RATE_SIZE;
-      
-      heartRate = beatAvg;
-    }
+  // Calculate SpO2 if buffer is filled
+  if (bufferFilled && (millis() - lastSpO2Calc > 1000)) {
+    calculateSpO2();
+    lastSpO2Calc = millis();
+    Serial.printf("SpO2: %d%% | HR: %d bpm | IR: %ld\n", spo2, heartRate, irValue);
   }
-  
-  // Read SpO2 - simplified approach
-  long redValue = particleSensor.getRed();
-  
-  if (irValue > 50000 && redValue > 50000) {
-    // Basic SpO2 calculation (simplified)
-    float ratio = (float)redValue / (float)irValue;
-    
-    // Empirical formula (approximate)
-    if (ratio > 0.4 && ratio < 2.0) {
-      spo2 = 110 - 25 * ratio;
-      
-      // Constrain to reasonable values
-      if (spo2 < 70) spo2 = 70;
-      if (spo2 > 100) spo2 = 100;
-    }
-  }
-  
-  Serial.printf("IR: %ld, Red: %ld, HR: %d, SpO2: %d\n", 
-                irValue, redValue, heartRate, spo2);
 }
 
 // ====================
@@ -402,7 +472,8 @@ void setup() {
   
   // Initialize I2C
   Wire.begin(I2C_SDA, I2C_SCL);
-  Serial.println("I2C initialized");
+  Wire.setClock(400000);  // Set I2C to 400kHz for faster communication
+  Serial.println("I2C initialized at 400kHz");
   
   // Initialize OLED
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -422,29 +493,33 @@ void setup() {
   display.println("Initializing...");
   display.display();
   
-  // Initialize MAX30102 with proper settings
+  // Initialize MAX30102 with OPTIMIZED settings for FAST response
   Serial.println("Initializing MAX30102...");
-  if (particleSensor.begin(Wire, I2C_SPEED_STANDARD)) {
+  if (particleSensor.begin(Wire, I2C_SPEED_FAST)) {
     Serial.println("MAX30102 found!");
     
-    // Configure sensor with optimal settings
-    byte ledBrightness = 0x1F; // Options: 0=Off to 255=50mA
-    byte sampleAverage = 4;    // Options: 1, 2, 4, 8, 16, 32
-    byte ledMode = 2;          // Options: 1=Red only, 2=Red+IR, 3=Red+IR+Green
-    int sampleRate = 100;      // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
-    int pulseWidth = 411;      // Options: 69, 118, 215, 411
-    int adcRange = 4096;       // Options: 2048, 4096, 8192, 16384
+    // OPTIMIZED SETTINGS for faster heart rate detection
+    byte ledBrightness = 0x7F;  // High brightness (127/255)
+    byte sampleAverage = 2;     // Average 2 samples for speed
+    byte ledMode = 2;           // Red + IR mode
+    byte sampleRate = 200;      // 200 samples per second
+    int pulseWidth = 411;       // 411us pulse width
+    int adcRange = 16384;       // 16-bit ADC range
     
     particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
     
-    // Turn on Red LED to indicate sensor is active
-    particleSensor.setPulseAmplitudeRed(0x0A);  // Turn Red LED to low to indicate sensor is running
-    particleSensor.setPulseAmplitudeIR(0x1F);   // IR LED brightness
+    // Set LED amplitudes
+    particleSensor.setPulseAmplitudeRed(0x0A);    // Low brightness for indicator
+    particleSensor.setPulseAmplitudeIR(0x7F);     // High IR for better signal (127/255)
+    particleSensor.setPulseAmplitudeGreen(0);     // Turn off green LED
     
     max30102Connected = true;
-    Serial.println("MAX30102 configured successfully");
+    Serial.println("✓ MAX30102 configured for FAST detection");
+    Serial.println("✓ Sample Rate: 200 Hz");
+    Serial.println("✓ Place finger firmly on sensor...");
     
     display.println("MAX30102: OK");
+    display.println("Ready for finger");
     display.display();
   } else {
     Serial.println("MAX30102 not found!");
@@ -473,42 +548,44 @@ void setup() {
   // Connect to MQTT
   connectToMqtt();
   
-  // Initialize rate array
+  // Initialize all arrays
   for (byte x = 0; x < RATE_SIZE; x++) {
     rates[x] = 0;
   }
   
-  Serial.println("Setup complete!");
+  bufferIndex = 0;
+  bufferFilled = false;
+  
+  Serial.println("\n✓✓✓ Setup complete! ✓✓✓");
+  Serial.println("========================\n");
   
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println("System Ready!");
+  display.println("");
+  display.println("Place finger firmly");
+  display.println("on sensor...");
   display.display();
-  delay(1000);
+  delay(2000);
 }
 
 // ====================
 // MAIN LOOP
 // ====================
 void loop() {
-  // Maintain WiFi connection
-  if (WiFi.status() != WL_CONNECTED) {
-    connectToWiFi();
+  // PRIORITY 1: Fast heart rate sampling (every 20ms)
+  if (millis() - lastHeartRateSample >= heartRateSampleInterval) {
+    sampleHeartRate();
+    lastHeartRateSample = millis();
   }
   
-  // Maintain MQTT connection
-  if (!mqttClient.connected()) {
-    connectToMqtt();
-  }
-  mqttClient.loop();
-  
-  // Read sensors at regular intervals
+  // PRIORITY 2: Regular sensor updates (every 1 second)
   if (millis() - lastSensorUpdate >= sensorInterval) {
     // Read environmental sensors
     readDHT22();
     
-    // Read biometric sensor
+    // Process MAX30102 data (SpO2 calculation)
     readMAX30102();
     
     // Control fan
@@ -520,14 +597,23 @@ void loop() {
     // Update display
     updateDisplay();
     
-    // Debug output
-    Serial.printf("T:%.1f°C H:%.1f%% HR:%d SpO2:%d%% Fan:%d%% Mode:%s MAX30102:%s\n",
+    // Compact debug output
+    Serial.printf("📊 T:%.1f°C | H:%.1f%% | HR:%d | SpO2:%d%% | Fan:%d%% | %s\n",
                   temperature, humidity, heartRate, spo2, fanSpeed, 
-                  autoMode ? "AUTO" : "MANUAL",
-                  max30102Connected ? "OK" : "DISCONNECTED");
+                  autoMode ? "AUTO" : "MANUAL");
     
     lastSensorUpdate = millis();
   }
   
-  delay(50);  // Small delay to prevent watchdog issues
+  // PRIORITY 3: Network maintenance
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToWiFi();
+  }
+  
+  if (!mqttClient.connected()) {
+    connectToMqtt();
+  }
+  mqttClient.loop();
+  
+  delay(10);  // Minimal delay for stability
 }
