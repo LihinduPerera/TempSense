@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/bloc/neck_cooler_bloc.dart';
 
-class FanControlCard extends StatelessWidget {
+class FanControlCard extends StatefulWidget {
   final int fanSpeed;
   final bool autoMode;
   final bool isConnected;
@@ -14,6 +14,56 @@ class FanControlCard extends StatelessWidget {
     required this.autoMode,
     required this.isConnected,
   });
+
+  @override
+  State<FanControlCard> createState() => _FanControlCardState();
+}
+
+class _FanControlCardState extends State<FanControlCard> {
+  // OPTIMIZED: Local state for instant UI updates
+  late int _localFanSpeed;
+  late bool _localAutoMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _localFanSpeed = widget.fanSpeed;
+    _localAutoMode = widget.autoMode;
+  }
+
+  @override
+  void didUpdateWidget(FanControlCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only update from props if significantly different (avoid jitter)
+    if ((widget.fanSpeed - _localFanSpeed).abs() > 2 || 
+        widget.autoMode != _localAutoMode) {
+      setState(() {
+        _localFanSpeed = widget.fanSpeed;
+        _localAutoMode = widget.autoMode;
+      });
+    }
+  }
+
+  void _setFanSpeed(int speed) {
+    // OPTIMIZED: Update UI immediately
+    setState(() {
+      _localFanSpeed = speed;
+      _localAutoMode = false;
+    });
+    
+    // Then send to device
+    context.read<NeckCoolerBloc>().add(SetFanSpeed(speed));
+  }
+
+  void _toggleAutoMode(bool value) {
+    // OPTIMIZED: Update UI immediately
+    setState(() {
+      _localAutoMode = value;
+    });
+    
+    // Then send to device
+    context.read<NeckCoolerBloc>().add(SetAutoMode(value));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,20 +88,16 @@ class FanControlCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      autoMode ? 'Auto Mode' : 'Manual Mode',
+                      _localAutoMode ? 'Auto Mode' : 'Manual Mode',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: autoMode ? Colors.green : Colors.blue,
+                        color: _localAutoMode ? Colors.green : Colors.blue,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Switch(
-                      value: autoMode,
-                      onChanged: isConnected
-                          ? (value) {
-                              context.read<NeckCoolerBloc>().add(SetAutoMode(value));
-                            }
-                          : null,
+                      value: _localAutoMode,
+                      onChanged: widget.isConnected ? _toggleAutoMode : null,
                       activeColor: Colors.green,
                     ),
                   ],
@@ -76,10 +122,13 @@ class FanControlCard extends StatelessWidget {
                     ),
                     pointers: <GaugePointer>[
                       RangePointer(
-                        value: fanSpeed.toDouble(),
+                        value: _localFanSpeed.toDouble(),
                         cornerStyle: CornerStyle.bothCurve,
                         width: 0.15,
                         sizeUnit: GaugeSizeUnit.factor,
+                        enableAnimation: true,
+                        animationDuration: 300,
+                        animationType: AnimationType.ease,
                         gradient: SweepGradient(
                           colors: [
                             Colors.blue.shade300,
@@ -89,11 +138,13 @@ class FanControlCard extends StatelessWidget {
                         ),
                       ),
                       MarkerPointer(
-                        value: fanSpeed.toDouble(),
+                        value: _localFanSpeed.toDouble(),
                         markerType: MarkerType.circle,
                         color: Colors.blue,
                         borderWidth: 2,
                         borderColor: Colors.white,
+                        enableAnimation: true,
+                        animationDuration: 300,
                       ),
                     ],
                     annotations: <GaugeAnnotation>[
@@ -103,7 +154,7 @@ class FanControlCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '$fanSpeed%',
+                              '$_localFanSpeed%',
                               style: const TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
@@ -127,15 +178,24 @@ class FanControlCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Slider(
-              value: fanSpeed.toDouble(),
+              value: _localFanSpeed.toDouble(),
               min: 0,
               max: 100,
               divisions: 20,
-              label: '$fanSpeed%',
+              label: '$_localFanSpeed%',
               activeColor: Colors.blue,
               inactiveColor: Colors.grey[300],
-              onChanged: isConnected && !autoMode
+              onChanged: widget.isConnected && !_localAutoMode
                   ? (value) {
+                      // OPTIMIZED: Update immediately as user drags
+                      setState(() {
+                        _localFanSpeed = value.toInt();
+                      });
+                    }
+                  : null,
+              onChangeEnd: widget.isConnected && !_localAutoMode
+                  ? (value) {
+                      // Send final value to device
                       context.read<NeckCoolerBloc>().add(SetFanSpeed(value.toInt()));
                     }
                   : null,
@@ -161,16 +221,14 @@ class FanControlCard extends StatelessWidget {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: isConnected && !autoMode
-              ? () {
-                  context.read<NeckCoolerBloc>().add(SetFanSpeed(speed));
-                }
+          onPressed: widget.isConnected && !_localAutoMode
+              ? () => _setFanSpeed(speed)
               : null,
           style: ElevatedButton.styleFrom(
             shape: const CircleBorder(),
             padding: const EdgeInsets.all(12),
-            backgroundColor: fanSpeed == speed ? Colors.blue : Colors.grey[200],
-            foregroundColor: fanSpeed == speed ? Colors.white : Colors.grey[600],
+            backgroundColor: _localFanSpeed == speed ? Colors.blue : Colors.grey[200],
+            foregroundColor: _localFanSpeed == speed ? Colors.white : Colors.grey[600],
             disabledBackgroundColor: Colors.grey[100],
             disabledForegroundColor: Colors.grey[400],
           ),
@@ -182,7 +240,7 @@ class FanControlCard extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: isConnected && !autoMode ? Colors.grey[700] : Colors.grey[400],
+            color: widget.isConnected && !_localAutoMode ? Colors.grey[700] : Colors.grey[400],
           ),
         ),
       ],
