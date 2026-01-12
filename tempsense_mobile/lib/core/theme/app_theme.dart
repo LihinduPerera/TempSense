@@ -1,51 +1,48 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color primaryColor = Color(0xFF2196F3);
-  static const Color secondaryColor = Color(0xFF4CAF50);
-  static const Color dangerColor = Color(0xFFF44336);
-  static const Color warningColor = Color(0xFFFF9800);
-  static const Color infoColor = Color(0xFF00BCD4);
-  static const Color darkColor = Color(0xFF121212);
-  static const Color lightColor = Color(0xFFF5F5F5);
+  // Custom accent color (bright teal) – used for buttons, focused borders, and specific text
+  static const Color primaryColor = Color(0xFF00BFA5); // Teal accent – vibrant and cooling
+
+  // Base color for seed – generates the full harmonious palette
+  static const Color seedColor = Color(0xFF00695C); // Deeper teal for better tonal variation
+
+  // Other semantic colors (kept for potential future use)
+  static const Color dangerColor = Color(0xFFE53935);
+  static const Color warningColor = Color(0xFFFFB300);
+  static const Color infoColor = Color(0xFF29B6F6);
 
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    primaryColor: primaryColor,
-    colorScheme: ColorScheme.light(
-      primary: primaryColor,
-      secondary: secondaryColor,
-      surface: Colors.white,
-      background: const Color(0xFFF8F9FA),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: Brightness.light,
     ),
-    scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+    scaffoldBackgroundColor: Colors.transparent, // Keeps gradient backgrounds possible
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
-      elevation: 1,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       centerTitle: true,
+      foregroundColor: Colors.white,
       titleTextStyle: TextStyle(
-        color: Colors.black,
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: FontWeight.w600,
+        color: Colors.white,
       ),
     ),
-    // Use CardThemeData (not CardTheme widget)
-    cardTheme: CardThemeData(
-      color: Colors.white,
-      elevation: 2,
+    cardTheme: const CardThemeData(
+      elevation: 8,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.all(Radius.circular(20)),
       ),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       clipBehavior: Clip.antiAlias,
     ),
     textTheme: const TextTheme(
-      displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-      displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-      displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-      headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+      displayLarge: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+      displayMedium: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+      displaySmall: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
       bodyLarge: TextStyle(fontSize: 16),
       bodyMedium: TextStyle(fontSize: 14),
     ),
@@ -53,76 +50,85 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-        textStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.grey),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.grey),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: primaryColor, width: 2),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: primaryColor, width: 2),
       ),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
   );
 
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    primaryColor: primaryColor,
-    colorScheme: ColorScheme.dark(
-      primary: primaryColor,
-      secondary: secondaryColor,
-      surface: const Color(0xFF1E1E1E),
-      background: const Color(0xFF121212),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: Brightness.dark,
     ),
-    scaffoldBackgroundColor: const Color(0xFF121212),
+    scaffoldBackgroundColor: Colors.transparent,
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF1E1E1E),
-      elevation: 1,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        color: Colors.white,
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: FontWeight.w600,
+        color: Colors.white,
       ),
     ),
-    // Use CardThemeData (not CardTheme widget)
-    cardTheme: CardThemeData(
-      color: const Color(0xFF1E1E1E),
-      elevation: 2,
+    cardTheme: const CardThemeData(
+      elevation: 8,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.all(Radius.circular(20)),
       ),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       clipBehavior: Clip.antiAlias,
     ),
     textTheme: const TextTheme(
-      displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-      displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-      displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-      headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+      displayLarge: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+      displayMedium: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+      displaySmall: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
       bodyLarge: TextStyle(fontSize: 16),
       bodyMedium: TextStyle(fontSize: 14),
     ).apply(
       bodyColor: Colors.white,
       displayColor: Colors.white,
+    ),
+    // Optional: Add dark-mode specific input decoration if needed
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.grey[850],
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey[700]!),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey[700]!),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: primaryColor, width: 2),
+      ),
     ),
   );
 }

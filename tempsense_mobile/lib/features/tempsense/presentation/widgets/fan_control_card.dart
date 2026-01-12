@@ -202,7 +202,7 @@ class _FanControlCardState extends State<FanControlCard> {
             ),
             const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildSpeedButton(context, 0, 'OFF', Icons.power_off),
                 _buildSpeedButton(context, 25, 'LOW', Icons.waves),
@@ -218,32 +218,35 @@ class _FanControlCardState extends State<FanControlCard> {
   }
 
   Widget _buildSpeedButton(BuildContext context, int speed, String label, IconData icon) {
-    return Column(
-      children: [
-        ElevatedButton(
-          onPressed: widget.isConnected && !_localAutoMode
-              ? () => _setFanSpeed(speed)
-              : null,
-          style: ElevatedButton.styleFrom(
-            shape: const CircleBorder(),
-            padding: const EdgeInsets.all(12),
-            backgroundColor: _localFanSpeed == speed ? Colors.blue : Colors.grey[200],
-            foregroundColor: _localFanSpeed == speed ? Colors.white : Colors.grey[600],
-            disabledBackgroundColor: Colors.grey[100],
-            disabledForegroundColor: Colors.grey[400],
+    return Container(
+      width: 45,
+      child: Column(
+        children: [
+          ElevatedButton(
+            onPressed: widget.isConnected && !_localAutoMode
+                ? () => _setFanSpeed(speed)
+                : null,
+            style: ElevatedButton.styleFrom(
+              shape: const CircleBorder(),
+              padding: const EdgeInsets.all(12),
+              backgroundColor: _localFanSpeed == speed ? Colors.blue : Colors.grey[200],
+              foregroundColor: _localFanSpeed == speed ? Colors.white : Colors.grey[600],
+              disabledBackgroundColor: Colors.grey[100],
+              disabledForegroundColor: Colors.grey[400],
+            ),
+            child: Icon(icon, size: 20),
           ),
-          child: Icon(icon, size: 20),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: widget.isConnected && !_localAutoMode ? Colors.grey[700] : Colors.grey[400],
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: widget.isConnected && !_localAutoMode ? Colors.grey[700] : Colors.grey[400],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tempsense_mobile/core/theme/app_theme.dart';
 import 'package:tempsense_mobile/features/tempsense/domain/entities/sensor_data.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/bloc/neck_cooler_bloc.dart';
+import 'package:tempsense_mobile/features/tempsense/presentation/screens/charts_screen.dart';
+import 'package:tempsense_mobile/features/tempsense/presentation/screens/settings_screen.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/widgets/connection_status.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/widgets/fan_control_card.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/widgets/ml_status_card.dart';
@@ -18,22 +20,38 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Neck Cooler Controller'),
+        title: const Text('TempSense'),
         centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              // Refresh connection
-              context.read<NeckCoolerBloc>().add(ConnectToDevice());
+              context.read<NeckCoolerBloc>().add(const ConnectToDevice());
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChartsScreen()),
+              );
             },
           ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              // Navigate to settings
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
             },
           ),
         ],
@@ -45,272 +63,264 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SnackBar(
                 content: Text(state.message),
                 backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
               ),
             );
           }
         },
         builder: (context, state) {
           if (state is NeckCoolerInitial) {
-            return _buildInitialView(context);
+            return _buildGradientBackground(isDark, _buildInitialView(context));
           } else if (state is NeckCoolerLoading) {
-            return _buildLoadingView();
+            return _buildGradientBackground(isDark, _buildLoadingView());
           } else if (state is NeckCoolerError) {
-            return _buildErrorView(context, state);
+            return _buildGradientBackground(isDark, _buildErrorView(context, state));
           } else if (state is NeckCoolerConnected) {
-            return _buildConnectedView(context, state);
+            return _buildGradientBackground(isDark, _buildConnectedView(context, state));
           }
-          return _buildInitialView(context);
+          return _buildGradientBackground(isDark, _buildInitialView(context));
         },
       ),
     );
   }
 
+  Widget _buildGradientBackground(bool isDark, Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isDark
+      ? [const Color(0xFF002925), const Color(0xFF001A17)] // Subtle dark teal tint
+      : [const Color(0xFFE0F2F1), Colors.white], // Teal 50 → white (softer and matches theme)
+        ),
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildInitialView(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          const SizedBox(height: 40),
-          Icon(
-            Icons.device_hub,
-            size: 120,
-            color: AppTheme.primaryColor.withOpacity(0.3),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Neck Cooler Controller',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primaryColor,
-                ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Connect to your IoT Neck Cooler device to start monitoring and controlling.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-          ),
-          const SizedBox(height: 40),
-          ConnectionStatus(
-            isConnected: false,
-            onConnect: () {
-              context.read<NeckCoolerBloc>().add(ConnectToDevice());
-            },
-            onDisconnect: () {},
-          ),
-        ],
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const SizedBox(height: 60),
+            Icon(
+              Icons.device_thermostat,
+              size: 120,
+              color: AppTheme.primaryColor.withOpacity(0.4),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'TempSense',
+              style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Connect to your TempSense device to start monitoring and controlling.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+            const SizedBox(height: 60),
+            ConnectionStatus(
+              isConnected: false,
+              onConnect: () {
+                context.read<NeckCoolerBloc>().add(const ConnectToDevice());
+              },
+              onDisconnect: () {},
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildLoadingView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            color: AppTheme.primaryColor,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Connecting to device...',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-          ),
-        ],
+    return SafeArea(
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppTheme.primaryColor),
+            const SizedBox(height: 24),
+            Text(
+              'Connecting to device...',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildErrorView(BuildContext context, NeckCoolerError state) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          const SizedBox(height: 40),
-          Icon(
-            Icons.error_outline,
-            size: 80,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Connection Error',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            state.message,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-          ),
-          const SizedBox(height: 24),
-          ConnectionStatus(
-            isConnected: false,
-            onConnect: () {
-              context.read<NeckCoolerBloc>().add(ConnectToDevice());
-            },
-            onDisconnect: () {},
-          ),
-        ],
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const SizedBox(height: 60),
+            Icon(Icons.error_outline, size: 100, color: Colors.red[400]),
+            const SizedBox(height: 32),
+            Text(
+              'Connection Error',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Colors.red[400],
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              state.message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 40),
+            ConnectionStatus(
+              isConnected: false,
+              onConnect: () {
+                context.read<NeckCoolerBloc>().add(const ConnectToDevice());
+              },
+              onDisconnect: () {},
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildConnectedView(BuildContext context, NeckCoolerConnected state) {
     final data = state.data;
-    
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          ConnectionStatus(
-            isConnected: data.isConnected,
-            onConnect: () {
-              context.read<NeckCoolerBloc>().add(ConnectToDevice());
-            },
-            onDisconnect: () {
-              context.read<NeckCoolerBloc>().add(DisconnectFromDevice());
-            },
-          ),
-          const SizedBox(height: 16),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.9,
-            children: [
-              SensorCard(
-                icon: Icons.thermostat,
-                color: Colors.orange,
-                title: 'Temperature',
-                value: data.temperature.toStringAsFixed(1),
-                unit: '°C',
-                valueColor: _getTemperatureColor(data.temperature),
-              ),
-              SensorCard(
-                icon: Icons.water_drop,
-                color: Colors.blue,
-                title: 'Humidity',
-                value: data.humidity.toStringAsFixed(0),
-                unit: '%',
-              ),
-              SensorCard(
-                icon: Icons.favorite,
-                color: Colors.red,
-                title: 'Heart Rate',
-                value: data.heartRate.toString(),
-                unit: 'BPM',
-              ),
-              SensorCard(
-                icon: Icons.bloodtype,
-                color: Colors.green,
-                title: 'SpO₂',
-                value: data.spo2.toString(),
-                unit: '%',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          FanControlCard(
-            fanSpeed: data.fanSpeed,
-            autoMode: state.isAutoMode,
-            isConnected: data.isConnected,
-          ),
-          const SizedBox(height: 16),
-          MLStatusCard(
-            mlConfidence: data.mlConfidence,
-            autoMode: state.isAutoMode,
-          ),
-          const SizedBox(height: 20),
-          _buildAlertsSection(data),
-        ],
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            ConnectionStatus(
+              isConnected: data.isConnected,
+              onConnect: () {
+                context.read<NeckCoolerBloc>().add(const ConnectToDevice());
+              },
+              onDisconnect: () {
+                context.read<NeckCoolerBloc>().add(const DisconnectFromDevice());
+              },
+            ),
+            const SizedBox(height: 24),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 1.0,
+              children: [
+                SensorCard(
+                  icon: Icons.thermostat,
+                  color: Colors.orange,
+                  title: 'Temperature',
+                  value: data.temperature.toStringAsFixed(1),
+                  unit: '°C',
+                  valueColor: _getTemperatureColor(data.temperature),
+                ),
+                SensorCard(
+                  icon: Icons.opacity,
+                  color: Colors.cyan,
+                  title: 'Humidity',
+                  value: data.humidity.toStringAsFixed(0),
+                  unit: '%',
+                ),
+                SensorCard(
+                  icon: Icons.favorite,
+                  color: Colors.red,
+                  title: 'Heart Rate',
+                  value: data.heartRate.toString(),
+                  unit: 'BPM',
+                ),
+                SensorCard(
+                  icon: Icons.bloodtype,
+                  color: Colors.green,
+                  title: 'SpO₂',
+                  value: data.spo2.toString(),
+                  unit: '%',
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            FanControlCard(
+              fanSpeed: data.fanSpeed,
+              autoMode: state.isAutoMode,
+              isConnected: data.isConnected,
+            ),
+            const SizedBox(height: 24),
+            MLStatusCard(
+              mlConfidence: data.mlConfidence,
+              autoMode: state.isAutoMode,
+            ),
+            const SizedBox(height: 32),
+            _buildAlertsSection(data),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildAlertsSection(SensorData data) {
     final alerts = <String>[];
-    
-    if (data.temperature > 35) {
-      alerts.add('High temperature detected! (${
-        data.temperature.toStringAsFixed(1)}°C)');
-    }
-    if (data.humidity > 70) {
-      alerts.add('High humidity may affect cooling efficiency');
-    }
-    if (data.heartRate > 100) {
-      alerts.add('Elevated heart rate detected');
-    }
-    if (data.spo2 < 95) {
-      alerts.add('SpO₂ level is lower than normal');
-    }
-    
-    if (alerts.isEmpty) return const SizedBox();
-    
+    if (data.temperature > 35) alerts.add('High temperature detected! (${data.temperature.toStringAsFixed(1)}°C)');
+    if (data.humidity > 70) alerts.add('High humidity detected');
+    if (data.heartRate > 100) alerts.add('Elevated heart rate');
+    if (data.spo2 < 95) alerts.add('Low SpO₂ level');
+
+    if (alerts.isEmpty) return const SizedBox.shrink();
+
     return Card(
-      elevation: 2,
+      color: Colors.orange.withOpacity(0.08),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: Colors.orange.withOpacity(0.3)),
       ),
-      color: Colors.orange.withOpacity(0.05),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.warning_amber,
-                  color: Colors.orange,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
+                Icon(Icons.warning_amber, color: Colors.orange[700]),
+                const SizedBox(width: 12),
                 Text(
                   'Health Alerts',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange,
-                  ),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.orange[700],
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             ...alerts.map((alert) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.circle,
-                    size: 6,
-                    color: Colors.orange,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      alert,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.orange.shade700,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.circle, size: 8, color: Colors.orange[700]),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          alert,
+                          style: TextStyle(color: Colors.orange[800]),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            )),
+                )),
           ],
         ),
       ),
@@ -318,7 +328,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Color _getTemperatureColor(double temperature) {
-    if (temperature < 28) return Colors.blue;
+    if (temperature < 28) return Colors.cyan;
     if (temperature < 32) return Colors.green;
     if (temperature < 36) return Colors.orange;
     return Colors.red;

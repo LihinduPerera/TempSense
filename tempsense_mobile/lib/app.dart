@@ -44,7 +44,7 @@ class _AppState extends State<App> {
         ),
       ],
       child: MaterialApp(
-        title: 'Neck Cooler Controller',
+        title: 'TempSense',
         theme: _darkMode ? AppTheme.darkTheme : AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         debugShowCheckedModeBanner: false,
