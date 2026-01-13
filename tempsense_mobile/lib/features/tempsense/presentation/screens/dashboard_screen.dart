@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:tempsense_mobile/core/notifications/notification_service.dart';
 import 'package:tempsense_mobile/core/theme/app_theme.dart';
+import 'package:tempsense_mobile/core/utils/heat_index_utils.dart';
 import 'package:tempsense_mobile/features/tempsense/domain/entities/sensor_data.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/bloc/neck_cooler_bloc.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/screens/charts_screen.dart';
+import 'package:tempsense_mobile/features/tempsense/presentation/screens/location_screen.dart'; // NEW
 import 'package:tempsense_mobile/features/tempsense/presentation/screens/settings_screen.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/widgets/connection_status.dart';
 import 'package:tempsense_mobile/features/tempsense/presentation/widgets/fan_control_card.dart';
@@ -18,6 +21,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  SensorData? _previousData;
+  double? _previousHeatIndex;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -39,32 +45,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             icon: const Icon(Icons.bar_chart),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ChartsScreen()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ChartsScreen()));
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.map), // NEW: Map button
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const LocationScreen()));
             },
           ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
         ],
       ),
       body: BlocConsumer<NeckCoolerBloc, NeckCoolerState>(
         listener: (context, state) {
+          // Existing error snackbar
           if (state is NeckCoolerError) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.red,
-              ),
+              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
             );
+          }
+
+          // NEW: Notification logic when thresholds are crossed
+          if (state is NeckCoolerConnected) {
+            final data = state.data;
+            final heatIndex = calculateHeatIndex(data.temperature, data.humidity);
+
+            // Individual sensor alerts
+            if (data.temperature > 35 && (_previousData?.temperature ?? 0) <= 35) {
+              NotificationService().showNotification(
+                id: 1,
+                title: 'High Temperature',
+                body: 'Temperature exceeded 35°C (${data.temperature.toStringAsFixed(1)}°C)',
+              );
+            }
+            if (data.humidity > 70 && (_previousData?.humidity ?? 0) <= 70) {
+              NotificationService().showNotification(
+                id: 2,
+                title: 'High Humidity',
+                body: 'Humidity is over 70% (${data.humidity.toStringAsFixed(0)}%)',
+              );
+            }
+            if (data.heartRate > 100 && (_previousData?.heartRate ?? 0) <= 100) {
+              NotificationService().showNotification(
+                id: 3,
+                title: 'Elevated Heart Rate',
+                body: 'Heart rate is ${data.heartRate} BPM',
+              );
+            }
+            if (data.spo2 < 95 && (_previousData?.spo2 ?? 100) >= 95) {
+              NotificationService().showNotification(
+                id: 4,
+                title: 'Low SpO₂',
+                body: 'SpO₂ level dropped to ${data.spo2}%',
+              );
+            }
+
+            // Heat Index danger alert (only when entering a higher risk level)
+            final currentRisk = getHeatIndexRiskLevel(heatIndex);
+            final previousRisk = getHeatIndexRiskLevel(_previousHeatIndex ?? 0);
+            if ((currentRisk == 'Danger' || currentRisk == 'Extreme Danger') &&
+                (previousRisk != 'Danger' && previousRisk != 'Extreme Danger')) {
+              NotificationService().showNotification(
+                id: 5,
+                title: '$currentRisk - Heat Alert',
+                body: 'Heat Index: ${heatIndex.toStringAsFixed(1)}°C — Take immediate action!',
+              );
+            }
+
+            // Update previous values
+            _previousData = data.copyWith();
+            _previousHeatIndex = heatIndex;
           }
         },
         builder: (context, state) {
@@ -196,6 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildConnectedView(BuildContext context, NeckCoolerConnected state) {
     final data = state.data;
+    final heatIndex = calculateHeatIndex(data.temperature, data.humidity);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -205,12 +262,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 20),
             ConnectionStatus(
               isConnected: data.isConnected,
-              onConnect: () {
-                context.read<NeckCoolerBloc>().add(const ConnectToDevice());
-              },
-              onDisconnect: () {
-                context.read<NeckCoolerBloc>().add(const DisconnectFromDevice());
-              },
+              onConnect: () => context.read<NeckCoolerBloc>().add(const ConnectToDevice()),
+              onDisconnect: () => context.read<NeckCoolerBloc>().add(const DisconnectFromDevice()),
             ),
             const SizedBox(height: 24),
             GridView.count(
@@ -250,6 +303,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   value: data.spo2.toString(),
                   unit: '%',
                 ),
+                // NEW: Heat Index card
+                SensorCard(
+                  icon: Icons.wb_sunny,
+                  color: getHeatIndexColor(heatIndex),
+                  title: 'Heat Index',
+                  value: heatIndex.toStringAsFixed(1),
+                  unit: '°C',
+                  valueColor: getHeatIndexColor(heatIndex),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -264,19 +326,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               autoMode: state.isAutoMode,
             ),
             const SizedBox(height: 32),
-            _buildAlertsSection(data),
+            _buildAlertsSection(data, heatIndex),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAlertsSection(SensorData data) {
+  Widget _buildAlertsSection(SensorData data, double heatIndex) {
     final alerts = <String>[];
+
     if (data.temperature > 35) alerts.add('High temperature detected! (${data.temperature.toStringAsFixed(1)}°C)');
-    if (data.humidity > 70) alerts.add('High humidity detected');
-    if (data.heartRate > 100) alerts.add('Elevated heart rate');
-    if (data.spo2 < 95) alerts.add('Low SpO₂ level');
+    if (data.humidity > 70) alerts.add('High humidity detected (${data.humidity.toStringAsFixed(0)}%)');
+    if (data.heartRate > 100) alerts.add('Elevated heart rate (${data.heartRate} BPM)');
+    if (data.spo2 < 95) alerts.add('Low SpO₂ level (${data.spo2}%)');
+
+    // Heat Index alerts
+    final risk = getHeatIndexRiskLevel(heatIndex);
+    if (risk == 'Extreme Danger') {
+      alerts.add('EXTREME DANGER: Heat Index ${heatIndex.toStringAsFixed(1)}°C');
+    } else if (risk == 'Danger') {
+      alerts.add('DANGER: Heat Index ${heatIndex.toStringAsFixed(1)}°C');
+    } else if (risk == 'Extreme Caution') {
+      alerts.add('Extreme Caution: Heat Index ${heatIndex.toStringAsFixed(1)}°C');
+    }
 
     if (alerts.isEmpty) return const SizedBox.shrink();
 
@@ -296,7 +369,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Icon(Icons.warning_amber, color: Colors.orange[700]),
                 const SizedBox(width: 12),
                 Text(
-                  'Health Alerts',
+                  'Health & Heat Alerts',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: Colors.orange[700],
                         fontWeight: FontWeight.bold,
@@ -312,12 +385,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Icon(Icons.circle, size: 8, color: Colors.orange[700]),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          alert,
-                          style: TextStyle(color: Colors.orange[800]),
-                        ),
-                      ),
+                      Expanded(child: Text(alert, style: TextStyle(color: Colors.orange[800]))),
                     ],
                   ),
                 )),
