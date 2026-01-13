@@ -6,7 +6,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize notifications
-  NotificationService().initialize();
+  await NotificationService().initialize();
   await NotificationService().requestPermissions();
 
   runApp(const App());
